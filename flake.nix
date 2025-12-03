@@ -36,7 +36,10 @@
           pname = "nixos-needsreboot";
           version = "0.1.10";
           src = ./.;
-          cargoLock.lockFile = ./Cargo.lock;
+          cargoLock = {
+            allowBuiltinFetchGit = true; # allows omitting cargoLock.outputHashes
+            lockFile = ./Cargo.lock;
+          };
         };
       });
     };
