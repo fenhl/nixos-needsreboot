@@ -1,8 +1,8 @@
 use std::env;
-use std::error::Error;
 use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
+use wheel::traits::IoResultExt as _;
 
 mod compare_nixos_modules;
 
@@ -10,7 +10,21 @@ pub static OLD_SYSTEM_PATH: &str = "/run/booted-system";
 pub static NEW_SYSTEM_PATH: &str = "/nix/var/nix/profiles/system";
 pub static NIXOS_NEEDS_REBOOT: &str = "/var/run/reboot-required";
 
-fn main() -> Result<(), Box<dyn Error>> {
+#[derive(Debug, thiserror::Error)]
+enum Error {
+    #[error(transparent)] Wheel(#[from] wheel::Error),
+    #[error("Could not determine Linux kernel version from path: {0}")]
+    KernelVersion(String),
+    #[error("Expected one directory in {0}")]
+    MissingLinuxVersionDir(String),
+    #[error("Cannot find the module's directory in /nix/store")]
+    MissingModuleDir,
+    #[error("Could not determine Systemd version from path: {0}")]
+    SystemdVersion(String),
+}
+
+#[wheel::main]
+fn main() -> Result<(), Error> {
     let env_args: Vec<String> = env::args().collect();
     let dry_run = env_args.contains(&String::from("--dry-run"));
 
@@ -30,13 +44,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     if Path::new("/nix/var/nix/profiles/system").exists() {
-        let old_system_id = fs::read_to_string(OLD_SYSTEM_PATH.to_string() + "/nixos-version")?;
-        let new_system_id = fs::read_to_string(NEW_SYSTEM_PATH.to_string() + "/nixos-version")?;
+        let old_system_id = fs::read_to_string(OLD_SYSTEM_PATH.to_string() + "/nixos-version").at(OLD_SYSTEM_PATH.to_string() + "/nixos-version")?;
+        let new_system_id = fs::read_to_string(NEW_SYSTEM_PATH.to_string() + "/nixos-version").at(NEW_SYSTEM_PATH.to_string() + "/nixos-version")?;
 
         if Path::new(NIXOS_NEEDS_REBOOT).exists() {
             let stdout = io::stdout();
             let mut handle = stdout.lock();
-            let _ = handle.write_all(&fs::read(NIXOS_NEEDS_REBOOT)?);
+            let _ = handle.write_all(&fs::read(NIXOS_NEEDS_REBOOT).at(NIXOS_NEEDS_REBOOT)?);
             let _ = handle.flush();
             std::process::exit(2);
         } else if old_system_id == new_system_id {
@@ -49,7 +63,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 if dry_run {
                     println!("{reason}");
                 } else {
-                    fs::write(NIXOS_NEEDS_REBOOT, reason)?;
+                    fs::write(NIXOS_NEEDS_REBOOT, reason).at(NIXOS_NEEDS_REBOOT)?;
                 }
                 std::process::exit(2);
             }

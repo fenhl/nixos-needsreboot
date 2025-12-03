@@ -1,6 +1,7 @@
-use std::{error::Error, fmt, fs};
+use std::{fmt, fs};
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
+use wheel::traits::IoResultExt as _;
 
 use crate::{NEW_SYSTEM_PATH, OLD_SYSTEM_PATH};
 
@@ -21,7 +22,7 @@ impl fmt::Display for ModuleType {
 }
 
 impl ModuleType {
-    fn get_nix_store_path(&self, use_old_path: bool) -> Result<String, Box<dyn Error>> {
+    fn get_nix_store_path(&self, use_old_path: bool) -> Result<String, crate::Error> {
         let suffix = match self {
             Self::LinuxKernel => "/kernel",
             Self::Systemd => "/systemd",
@@ -37,7 +38,7 @@ impl ModuleType {
             NEW_SYSTEM_PATH.to_string()
         };
 
-        let tmp_module_path = fs::read_link(system_path + suffix)?
+        let tmp_module_path = fs::read_link(system_path.clone() + suffix).at(system_path + suffix)?
             .into_os_string()
             .into_string()
             .expect("Cannot convert PathBuf to String");
@@ -46,7 +47,7 @@ impl ModuleType {
             let split_module_path = tmp_module_path.split('/').collect::<Vec<&str>>();
             let mut module_dir = split_module_path
                 .get(1..4)
-                .ok_or("Cannot find the module's directory in /nix/store")?
+                .ok_or(crate::Error::MissingModuleDir)?
                 .join("/");
             module_dir.insert(0, '/');
             module_dir
@@ -57,31 +58,29 @@ impl ModuleType {
         Ok(nix_module_path)
     }
 
-    fn get_linux_version(linux_path: &str) -> Result<String, Box<dyn Error>> {
-        let lib_modules_path = fs::read_dir(linux_path)?
+    fn get_linux_version(linux_path: &str) -> Result<String, crate::Error> {
+        let lib_modules_path = fs::read_dir(linux_path).at(linux_path)?
             .nth(0)
-            .ok_or("Expected one directory in ".to_string() + linux_path)??
+            .ok_or_else(|| crate::Error::MissingLinuxVersionDir(linux_path.to_owned()))?.at(linux_path)?
             .path()
             .into_os_string()
             .into_string()
             .expect("Cannot convert PathBuf to String");
-        let linux_version = lib_modules_path.split('/').nth(6).ok_or(
-            "Could not determine Linux kernel version from path: ".to_string() + &lib_modules_path,
-        )?;
+        let linux_version = lib_modules_path.split('/').nth(6).ok_or_else(|| crate::Error::KernelVersion(lib_modules_path.clone()))?;
 
         Ok(linux_version.to_string())
     }
 
-    fn get_systemd_version(systemd_path: &str) -> Result<String, Box<dyn Error>> {
+    fn get_systemd_version(systemd_path: &str) -> Result<String, crate::Error> {
         let split_systemd_path = systemd_path.split('-').collect::<Vec<&str>>();
         let systemd_version = split_systemd_path
             .get(2..)
-            .ok_or("Could not determine Systemd version from path: ".to_string() + systemd_path)?
+            .ok_or_else(|| crate::Error::SystemdVersion(systemd_path.to_owned()))?
             .join("-");
         Ok(systemd_version)
     }
 
-    fn get_version(&self) -> Result<(String, String), Box<dyn Error>> {
+    fn get_version(&self) -> Result<(String, String), crate::Error> {
         let old_module_root_path = self.get_nix_store_path(true)?;
         let new_module_root_path = self.get_nix_store_path(false)?;
 
@@ -105,7 +104,7 @@ impl ModuleType {
     }
 }
 
-pub fn upgrades_available() -> Result<String, Box<dyn Error>> {
+pub fn upgrades_available() -> Result<String, crate::Error> {
     let mut reason = String::new();
     'x: for module in ModuleType::iter() {
         let (mut old_module_version, mut new_module_version) = module.get_version()?;
