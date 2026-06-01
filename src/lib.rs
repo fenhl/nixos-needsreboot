@@ -1,4 +1,3 @@
-use std::fs;
 use wheel::traits::IoResultExt as _;
 
 mod compare_nixos_modules;
@@ -29,9 +28,25 @@ pub enum NeedsReboot {
     Updates(String),
 }
 
-pub fn needs_reboot() -> Result<NeedsReboot, Error> {
-    let old_system_id = fs::read_to_string(OLD_SYSTEM_PATH.to_string() + "/nixos-version").at(OLD_SYSTEM_PATH.to_string() + "/nixos-version")?;
-    let new_system_id = fs::read_to_string(NEW_SYSTEM_PATH.to_string() + "/nixos-version").at(NEW_SYSTEM_PATH.to_string() + "/nixos-version")?;
+pub fn needs_reboot_sync() -> Result<NeedsReboot, Error> {
+    let old_system_id = std::fs::read_to_string(OLD_SYSTEM_PATH.to_string() + "/nixos-version").at(OLD_SYSTEM_PATH.to_string() + "/nixos-version")?;
+    let new_system_id = std::fs::read_to_string(NEW_SYSTEM_PATH.to_string() + "/nixos-version").at(NEW_SYSTEM_PATH.to_string() + "/nixos-version")?;
+
+    Ok(if old_system_id == new_system_id {
+        NeedsReboot::IsLatest
+    } else {
+        let reason = compare_nixos_modules::upgrades_available()?;
+        if reason.is_empty() {
+            NeedsReboot::NoUpdates
+        } else {
+            NeedsReboot::Updates(reason)
+        }
+    })
+}
+
+pub async fn needs_reboot_async() -> Result<NeedsReboot, Error> {
+    let old_system_id = wheel::fs::read_to_string(OLD_SYSTEM_PATH.to_string() + "/nixos-version").await?;
+    let new_system_id = wheel::fs::read_to_string(NEW_SYSTEM_PATH.to_string() + "/nixos-version").await?;
 
     Ok(if old_system_id == new_system_id {
         NeedsReboot::IsLatest

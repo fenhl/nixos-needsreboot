@@ -35,7 +35,7 @@ fn main() -> Result<(), Error> {
             let _ = handle.flush();
             std::process::exit(2);
         } else {
-            match nixos_needsreboot::needs_reboot()? {
+            match nixos_needsreboot::needs_reboot_sync()? {
                 NeedsReboot::IsLatest => eprintln!("DEBUG: you are using the latest NixOS generation, no need to reboot"),
                 NeedsReboot::NoUpdates => eprintln!("DEBUG: no updates available, moar uptime!!!"),
                 NeedsReboot::Updates(reason) => {
