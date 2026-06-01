@@ -3,25 +3,9 @@ use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
 use wheel::traits::IoResultExt as _;
+use nixos_needsreboot::{Error, NeedsReboot};
 
-mod compare_nixos_modules;
-
-pub static OLD_SYSTEM_PATH: &str = "/run/booted-system";
-pub static NEW_SYSTEM_PATH: &str = "/nix/var/nix/profiles/system";
 pub static NIXOS_NEEDS_REBOOT: &str = "/var/run/reboot-required";
-
-#[derive(Debug, thiserror::Error)]
-enum Error {
-    #[error(transparent)] Wheel(#[from] wheel::Error),
-    #[error("Could not determine Linux kernel version from path: {0}")]
-    KernelVersion(String),
-    #[error("Expected one directory in {0}")]
-    MissingLinuxVersionDir(String),
-    #[error("Cannot find the module's directory in /nix/store")]
-    MissingModuleDir,
-    #[error("Could not determine Systemd version from path: {0}")]
-    SystemdVersion(String),
-}
 
 #[wheel::main]
 fn main() -> Result<(), Error> {
@@ -44,28 +28,24 @@ fn main() -> Result<(), Error> {
     }
 
     if Path::new("/nix/var/nix/profiles/system").exists() {
-        let old_system_id = fs::read_to_string(OLD_SYSTEM_PATH.to_string() + "/nixos-version").at(OLD_SYSTEM_PATH.to_string() + "/nixos-version")?;
-        let new_system_id = fs::read_to_string(NEW_SYSTEM_PATH.to_string() + "/nixos-version").at(NEW_SYSTEM_PATH.to_string() + "/nixos-version")?;
-
         if Path::new(NIXOS_NEEDS_REBOOT).exists() {
             let stdout = io::stdout();
             let mut handle = stdout.lock();
             let _ = handle.write_all(&fs::read(NIXOS_NEEDS_REBOOT).at(NIXOS_NEEDS_REBOOT)?);
             let _ = handle.flush();
             std::process::exit(2);
-        } else if old_system_id == new_system_id {
-            eprintln!("DEBUG: you are using the latest NixOS generation, no need to reboot");
         } else {
-            let reason = compare_nixos_modules::upgrades_available()?;
-            if reason.is_empty() {
-                eprintln!("DEBUG: no updates available, moar uptime!!!");
-            } else {
-                if dry_run {
-                    println!("{reason}");
-                } else {
-                    fs::write(NIXOS_NEEDS_REBOOT, reason).at(NIXOS_NEEDS_REBOOT)?;
+            match nixos_needsreboot::needs_reboot()? {
+                NeedsReboot::IsLatest => eprintln!("DEBUG: you are using the latest NixOS generation, no need to reboot"),
+                NeedsReboot::NoUpdates => eprintln!("DEBUG: no updates available, moar uptime!!!"),
+                NeedsReboot::Updates(reason) => {
+                    if dry_run {
+                        println!("{reason}");
+                    } else {
+                        fs::write(NIXOS_NEEDS_REBOOT, reason).at(NIXOS_NEEDS_REBOOT)?;
+                    }
+                    std::process::exit(2);
                 }
-                std::process::exit(2);
             }
         }
     } else {
