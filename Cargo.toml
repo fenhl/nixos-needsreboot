@@ -1,6 +1,6 @@
 [package]
 name = "nixos-needsreboot"
-version = "0.1.10"
+version = "0.1.11"
 edition = "2021"
 description = "Determine if you need to reboot your NixOS machine"
 license = "GPL-2.0"
@@ -10,6 +10,7 @@ keywords = [ "nixos" ]
 categories = [ "command-line-utilities" ]
 
 [dependencies]
+clap = { version = "4", features = ["derive"] }
 strum = "0.28"
 strum_macros = "0.28"
 thiserror = "2"

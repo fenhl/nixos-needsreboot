@@ -7,16 +7,15 @@ use nixos_needsreboot::{Error, NeedsReboot};
 
 pub static NIXOS_NEEDS_REBOOT: &str = "/var/run/reboot-required";
 
+#[derive(clap::Parser)]
+#[clap(version)]
+struct Args {
+    #[clap(long)]
+    dry_run: bool,
+}
+
 #[wheel::main]
-fn main() -> Result<(), Error> {
-    let env_args: Vec<String> = env::args().collect();
-    let dry_run = env_args.contains(&String::from("--dry-run"));
-
-    if env_args.contains(&String::from("--version")) {
-        println!("{}: v{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
-        std::process::exit(0);
-    }
-
+fn main(Args { dry_run }: Args) -> Result<(), Error> {
     let user = env::var_os("USER")
         .unwrap()
         .into_string()
