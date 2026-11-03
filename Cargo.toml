@@ -1,7 +1,8 @@
 [package]
 name = "nixos-needsreboot"
 version = "0.1.11"
-edition = "2021"
+edition = "2024"
+rust-version = "1.95" # nixpkgs stable
 description = "Determine if you need to reboot your NixOS machine"
 license = "GPL-2.0"
 repository = "https://github.com/thefossguy/nixos-reedsreboot"
