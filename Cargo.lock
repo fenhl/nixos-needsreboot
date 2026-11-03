@@ -310,6 +310,7 @@ name = "nixos-needsreboot"
 version = "0.1.11"
 dependencies = [
  "clap",
+ "futures",
  "strum",
  "strum_macros",
  "thiserror",
